@@ -7,12 +7,12 @@ import (
 	"github.com/gofiber/fiber/v2/middleware/cors"
 	"github.com/gofiber/fiber/v2/middleware/logger"
 	"github.com/gofiber/fiber/v2/middleware/recover"
-	"github.com/naufalnak/bengkelku-api/config"
-	"github.com/naufalnak/bengkelku-api/internal/domain"
-	"github.com/naufalnak/bengkelku-api/internal/handler"
-	"github.com/naufalnak/bengkelku-api/internal/repository"
-	"github.com/naufalnak/bengkelku-api/internal/service"
-	"github.com/naufalnak/bengkelku-api/pkg/middleware"
+	"github.com/naufalnak/bengkelhub-backend/config"
+	"github.com/naufalnak/bengkelhub-backend/internal/domain"
+	"github.com/naufalnak/bengkelhub-backend/internal/handler"
+	"github.com/naufalnak/bengkelhub-backend/internal/repository"
+	"github.com/naufalnak/bengkelhub-backend/internal/service"
+	"github.com/naufalnak/bengkelhub-backend/pkg/middleware"
 )
 
 func main() {

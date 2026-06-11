@@ -2,7 +2,7 @@ package repository
 
 import (
 	"github.com/google/uuid"
-	"github.com/naufalnak/bengkelku-api/internal/domain"
+	"github.com/naufalnak/bengkelhub-backend/internal/domain"
 	"gorm.io/gorm"
 )
 

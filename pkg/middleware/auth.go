@@ -4,9 +4,9 @@ import (
 	"strings"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/naufalnak/bengkelku-api/internal/domain"
-	"github.com/naufalnak/bengkelku-api/pkg/jwt"
-	"github.com/naufalnak/bengkelku-api/pkg/response"
+	"github.com/naufalnak/bengkelhub-backend/internal/domain"
+	"github.com/naufalnak/bengkelhub-backend/pkg/jwt"
+	"github.com/naufalnak/bengkelhub-backend/pkg/response"
 )
 
 const UserIDKey = "user_id"

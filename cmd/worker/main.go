@@ -3,7 +3,7 @@ package main
 import (
 	"log"
 
-	"github.com/naufalnak/bengkelku-api/config"
+	"github.com/naufalnak/bengkelhub-backend/config"
 )
 
 func main() {

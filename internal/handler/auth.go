@@ -2,11 +2,11 @@ package handler
 
 import (
 	"github.com/gofiber/fiber/v2"
-	"github.com/naufalnak/bengkelku-api/internal/domain"
-	"github.com/naufalnak/bengkelku-api/internal/service"
-	"github.com/naufalnak/bengkelku-api/pkg/middleware"
-	"github.com/naufalnak/bengkelku-api/pkg/response"
-	"github.com/naufalnak/bengkelku-api/pkg/validator"
+	"github.com/naufalnak/bengkelhub-backend/internal/domain"
+	"github.com/naufalnak/bengkelhub-backend/internal/service"
+	"github.com/naufalnak/bengkelhub-backend/pkg/middleware"
+	"github.com/naufalnak/bengkelhub-backend/pkg/response"
+	"github.com/naufalnak/bengkelhub-backend/pkg/validator"
 )
 
 type AuthHandler struct {

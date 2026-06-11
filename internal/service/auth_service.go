@@ -3,9 +3,9 @@ package service
 import (
 	"errors"
 
-	"github.com/naufalnak/bengkelku-api/internal/domain"
-	"github.com/naufalnak/bengkelku-api/internal/repository"
-	"github.com/naufalnak/bengkelku-api/pkg/jwt"
+	"github.com/naufalnak/bengkelhub-backend/internal/domain"
+	"github.com/naufalnak/bengkelhub-backend/internal/repository"
+	"github.com/naufalnak/bengkelhub-backend/pkg/jwt"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
