@@ -18,10 +18,10 @@ import (
 func main() {
 	// Load config
 	config.Load()
-
+ 
 	// Connect DB
 	config.ConnectDB()
-
+ 
 	// Auto migrate
 	if err := config.DB.AutoMigrate(
 		&domain.User{},
@@ -31,13 +31,20 @@ func main() {
 	); err != nil {
 		log.Fatalf("AutoMigrate failed: %v", err)
 	}
-
-	// Init layers
-	userRepo := repository.NewUserRepository(config.DB)
-	authSvc := service.NewAuthService(userRepo)
-	authHandler := handler.NewAuthHandler(authSvc)
-
-	// Fiber app
+ 
+	// ── Repositories ──────────────────────────────────────
+	userRepo     := repository.NewUserRepository(config.DB)
+	workshopRepo := repository.NewWorkshopRepository(config.DB)
+ 
+	// ── Services ──────────────────────────────────────────
+	authSvc     := service.NewAuthService(userRepo)
+	workshopSvc := service.NewWorkshopService(workshopRepo)
+ 
+	// ── Handlers ──────────────────────────────────────────
+	authHandler     := handler.NewAuthHandler(authSvc)
+	workshopHandler := handler.NewWorkshopHandler(workshopSvc)
+ 
+	// ── Fiber app ─────────────────────────────────────────
 	app := fiber.New(fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{
@@ -46,8 +53,7 @@ func main() {
 			})
 		},
 	})
-
-	// Global middleware
+ 
 	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
@@ -55,22 +61,30 @@ func main() {
 		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
 		AllowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS",
 	}))
-
-	// Health check
+ 
+	// ── Routes ────────────────────────────────────────────
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{"status": "ok"})
 	})
-
-	// API v1 routes
+ 
 	v1 := app.Group("/api/v1")
-
-	// Auth routes (public)
+ 
+	// Auth (public)
 	auth := v1.Group("/auth")
 	auth.Post("/register", authHandler.Register)
 	auth.Post("/login", authHandler.Login)
 	auth.Get("/me", middleware.Auth(), authHandler.Me)
-
-	// Start server
+ 
+	// Workshops
+	workshops := v1.Group("/workshops")
+	workshops.Get("/", workshopHandler.GetAll)                                                          // public
+	workshops.Get("/my", middleware.Auth(), middleware.RequireRole(domain.RoleOperator), workshopHandler.GetMyWorkshops) // operator
+	workshops.Get("/:id", workshopHandler.GetByID)                                                     // public
+	workshops.Post("/", middleware.Auth(), middleware.RequireRole(domain.RoleOperator), workshopHandler.Create)         // operator
+	workshops.Patch("/:id", middleware.Auth(), middleware.RequireRole(domain.RoleOperator), workshopHandler.Update)     // operator
+	workshops.Delete("/:id", middleware.Auth(), middleware.RequireRole(domain.RoleOperator), workshopHandler.Delete)    // operator
+ 
+	// Start
 	log.Printf("Server running on port %s", config.Cfg.AppPort)
 	if err := app.Listen(":" + config.Cfg.AppPort); err != nil {
 		log.Fatalf("Server failed: %v", err)
