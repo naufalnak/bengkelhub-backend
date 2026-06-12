@@ -8,12 +8,13 @@ import (
 )
 
 type Config struct {
-	AppEnv      string
-	AppPort     string
-	DatabaseURL string
-	JWTSecret   string
+	AppEnv       string
+	AppPort      string
+	DatabaseURL  string
+	JWTSecret    string
 	JWTExpiresIn string
-	RedisURL    string
+	RedisURL     string
+	FonnteToken  string
 }
 
 var Cfg *Config
@@ -30,6 +31,7 @@ func Load() {
 		JWTSecret:    getEnv("JWT_SECRET", "secret"),
 		JWTExpiresIn: getEnv("JWT_EXPIRES_IN", "24h"),
 		RedisURL:     getEnv("REDIS_URL", ""),
+		FonnteToken:  getEnv("FONNTE_TOKEN", ""),
 	}
 }
 
