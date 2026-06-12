@@ -38,7 +38,7 @@ func main() {
 	authSvc     := service.NewAuthService(userRepo)
 	workshopSvc := service.NewWorkshopService(workshopRepo)
 	slotSvc     := service.NewSlotService(slotRepo, workshopRepo)
-	orderSvc    := service.NewOrderService(orderRepo, slotRepo, workshopRepo)
+	orderSvc    := service.NewOrderService(orderRepo, slotRepo, workshopRepo, userRepo)
 
 	// ── Handlers ──────────────────────────────────────────
 	authHandler     := handler.NewAuthHandler(authSvc)
@@ -90,7 +90,7 @@ func main() {
 	workshops.Get("/:workshopId/slots", slotHandler.GetByWorkshop)
 	workshops.Post("/:workshopId/slots", middleware.Auth(), middleware.RequireRole(domain.RoleOperator), slotHandler.Create)
 
-	// Orders (nested under workshop — operator)
+	// Orders (nested — operator)
 	workshops.Get("/:workshopId/orders", middleware.Auth(), middleware.RequireRole(domain.RoleOperator), orderHandler.GetWorkshopOrders)
 
 	// Slots (standalone)
