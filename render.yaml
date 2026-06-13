@@ -1,0 +1,41 @@
+services:
+  # API Server
+  - type: web
+    name: bengkelhub-api
+    env: go
+    region: singapore
+    plan: free
+    buildCommand: go build -o bin/api ./cmd/api/main.go
+    startCommand: ./bin/api
+    healthCheckPath: /health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: APP_PORT
+        value: 8080
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 24h
+      - key: REDIS_URL
+        sync: false
+      - key: FONNTE_TOKEN
+        sync: false
+
+  # Worker
+  - type: worker
+    name: bengkelhub-worker
+    env: go
+    region: singapore
+    plan: free
+    buildCommand: go build -o bin/worker ./cmd/worker/main.go
+    startCommand: ./bin/worker
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: REDIS_URL
+        sync: false
+      - key: FONNTE_TOKEN
+        sync: false
