@@ -45,3 +45,21 @@ type UpdateWorkshopRequest struct {
 	Phone       string `json:"phone" validate:"omitempty"`
 	IsActive    *bool  `json:"is_active" validate:"omitempty"`
 }
+
+type CreateSlotRequest struct {
+	Date       string `json:"date" validate:"required"`
+	MaxBooking int    `json:"max_booking" validate:"omitempty,min=1"`
+}
+
+type UpdateSlotRequest struct {
+	Date       string `json:"date" validate:"omitempty"`
+	MaxBooking int    `json:"max_booking" validate:"omitempty,min=1"`
+}
+
+func (s *Slot) IsAvailable() bool {
+	return s.Booked < s.MaxBooking
+}
+
+func (s *Slot) RemainingSlots() int {
+	return s.MaxBooking - s.Booked
+}

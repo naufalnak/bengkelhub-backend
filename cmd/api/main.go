@@ -13,11 +13,13 @@ import (
 	"github.com/naufalnak/bengkelhub-backend/internal/repository"
 	"github.com/naufalnak/bengkelhub-backend/internal/service"
 	"github.com/naufalnak/bengkelhub-backend/pkg/middleware"
+	"github.com/naufalnak/bengkelhub-backend/pkg/tasks"
 )
 
 func main() {
 	config.Load()
 	config.ConnectDB()
+	tasks.InitClient() // init Asynq client
 
 	if err := config.DB.AutoMigrate(
 		&domain.User{},
