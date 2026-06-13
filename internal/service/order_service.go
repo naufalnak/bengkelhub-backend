@@ -2,11 +2,13 @@ package service
 
 import (
 	"errors"
+	"log"
 
 	"github.com/google/uuid"
 	"github.com/naufalnak/bengkelhub-backend/internal/domain"
 	"github.com/naufalnak/bengkelhub-backend/internal/repository"
 	"github.com/naufalnak/bengkelhub-backend/pkg/fonnte"
+	"github.com/naufalnak/bengkelhub-backend/pkg/tasks"
 	"gorm.io/gorm"
 )
 
@@ -85,7 +87,7 @@ func (s *orderService) Create(customerID uuid.UUID, req *domain.CreateOrderReque
 		return nil, err
 	}
 
-	// Notif WA ke operator workshop
+	// Notif + enqueue reminder (async)
 	go func() {
 		customer, err := s.userRepo.FindByID(customerID)
 		if err != nil {
@@ -95,15 +97,25 @@ func (s *orderService) Create(customerID uuid.UUID, req *domain.CreateOrderReque
 		if err != nil {
 			return
 		}
+
+		// WA ke operator — booking baru
 		msg := fonnte.MsgNewOrder(
-			customer.Name,
-			order.VehicleType,
-			order.VehiclePlate,
-			workshop.Name,
-			slot.Date,
-			order.Notes,
+			customer.Name, order.VehicleType, order.VehiclePlate,
+			workshop.Name, slot.Date, order.Notes,
 		)
 		fonnte.SendAsync(operator.Phone, msg)
+
+		// Enqueue reminder H-1 ke customer
+		if err := tasks.EnqueueReminderBooking(tasks.ReminderBookingPayload{
+			OrderID:       order.ID,
+			CustomerName:  customer.Name,
+			CustomerPhone: customer.Phone,
+			WorkshopName:  workshop.Name,
+			VehiclePlate:  order.VehiclePlate,
+			SlotDate:      slot.Date,
+		}); err != nil {
+			log.Printf("[Order] Failed to enqueue reminder: %v", err)
+		}
 	}()
 
 	return order, nil
@@ -121,7 +133,6 @@ func (s *orderService) GetByID(id uuid.UUID, requesterID uuid.UUID, requesterRol
 	if requesterRole == domain.RoleCustomer && order.CustomerID != requesterID {
 		return nil, errors.New("forbidden")
 	}
-
 	if requesterRole == domain.RoleOperator {
 		workshop, err := s.workshopRepo.FindByID(order.WorkshopID)
 		if err != nil || workshop.OwnerID != requesterID {
@@ -133,12 +144,8 @@ func (s *orderService) GetByID(id uuid.UUID, requesterID uuid.UUID, requesterRol
 }
 
 func (s *orderService) GetMyOrders(customerID uuid.UUID, page, limit int) ([]domain.Order, int64, error) {
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 || limit > 50 {
-		limit = 10
-	}
+	if page < 1 { page = 1 }
+	if limit < 1 || limit > 50 { limit = 10 }
 	return s.orderRepo.FindByCustomerID(customerID, page, limit)
 }
 
@@ -154,12 +161,8 @@ func (s *orderService) GetWorkshopOrders(workshopID uuid.UUID, ownerID uuid.UUID
 		return nil, 0, errors.New("forbidden: you don't own this workshop")
 	}
 
-	if page < 1 {
-		page = 1
-	}
-	if limit < 1 || limit > 50 {
-		limit = 10
-	}
+	if page < 1 { page = 1 }
+	if limit < 1 || limit > 50 { limit = 10 }
 	return s.orderRepo.FindByWorkshopID(workshopID, page, limit)
 }
 
@@ -192,19 +195,12 @@ func (s *orderService) UpdateStatus(id uuid.UUID, ownerID uuid.UUID, req *domain
 	// Notif WA ke customer
 	go func() {
 		customer, err := s.userRepo.FindByID(order.CustomerID)
-		if err != nil {
-			return
-		}
+		if err != nil { return }
 		slot, err := s.slotRepo.FindByID(order.SlotID)
-		if err != nil {
-			return
-		}
+		if err != nil { return }
 		msg := fonnte.MsgStatusUpdate(
-			customer.Name,
-			workshop.Name,
-			order.VehiclePlate,
-			string(req.Status),
-			slot.Date,
+			customer.Name, workshop.Name, order.VehiclePlate,
+			string(req.Status), slot.Date,
 		)
 		fonnte.SendAsync(customer.Phone, msg)
 	}()
@@ -232,34 +228,21 @@ func (s *orderService) Cancel(id uuid.UUID, customerID uuid.UUID) error {
 	if err := s.orderRepo.UpdateStatus(id, domain.BookingStatusCancelled); err != nil {
 		return err
 	}
-
 	_ = s.slotRepo.DecrementBooked(order.SlotID)
 
 	// Notif WA ke operator
 	go func() {
 		customer, err := s.userRepo.FindByID(customerID)
-		if err != nil {
-			return
-		}
+		if err != nil { return }
 		workshop, err := s.workshopRepo.FindByID(order.WorkshopID)
-		if err != nil {
-			return
-		}
+		if err != nil { return }
 		operator, err := s.userRepo.FindByID(workshop.OwnerID)
-		if err != nil {
-			return
-		}
+		if err != nil { return }
 		slot, err := s.slotRepo.FindByID(order.SlotID)
-		if err != nil {
-			return
-		}
+		if err != nil { return }
 		msg := fonnte.MsgOrderCancelled(
-			operator.Name,
-			customer.Name,
-			order.VehicleType,
-			order.VehiclePlate,
-			workshop.Name,
-			slot.Date,
+			operator.Name, customer.Name, order.VehicleType,
+			order.VehiclePlate, workshop.Name, slot.Date,
 		)
 		fonnte.SendAsync(operator.Phone, msg)
 	}()
@@ -274,11 +257,8 @@ func validateStatusTransition(current, next domain.BookingStatus) error {
 		domain.BookingStatusDone:      {},
 		domain.BookingStatusCancelled: {},
 	}
-
 	for _, s := range allowed[current] {
-		if s == next {
-			return nil
-		}
+		if s == next { return nil }
 	}
 	return errors.New("invalid status transition: " + string(current) + " → " + string(next))
 }

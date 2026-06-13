@@ -9,10 +9,10 @@ import (
 type OrderRepository interface {
 	Create(order *domain.Order) error
 	FindByID(id uuid.UUID) (*domain.Order, error)
+	FindByIDWithRelations(id uuid.UUID) (*domain.Order, error)
 	FindByCustomerID(customerID uuid.UUID, page, limit int) ([]domain.Order, int64, error)
 	FindByWorkshopID(workshopID uuid.UUID, page, limit int) ([]domain.Order, int64, error)
 	UpdateStatus(id uuid.UUID, status domain.BookingStatus) error
-	FindByIDWithRelations(id uuid.UUID) (*domain.Order, error)
 }
 
 type orderRepository struct {
@@ -24,7 +24,15 @@ func NewOrderRepository(db *gorm.DB) OrderRepository {
 }
 
 func (r *orderRepository) Create(order *domain.Order) error {
-	return r.db.Create(order).Error
+	if err := r.db.Create(order).Error; err != nil {
+		return err
+	}
+	// Reload dengan relasi setelah create
+	return r.db.
+		Preload("Customer").
+		Preload("Workshop").
+		Preload("Slot").
+		First(order, "id = ?", order.ID).Error
 }
 
 func (r *orderRepository) FindByID(id uuid.UUID) (*domain.Order, error) {

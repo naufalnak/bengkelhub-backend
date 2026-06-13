@@ -10,6 +10,16 @@ import (
 	"gorm.io/gorm"
 )
 
+type CreateSlotRequest struct {
+    Date       string `json:"date" validate:"required"`
+    MaxBooking int    `json:"max_booking" validate:"omitempty,min=1"`
+}
+
+type UpdateSlotRequest struct {
+    Date       string `json:"date" validate:"omitempty"`
+    MaxBooking int    `json:"max_booking" validate:"omitempty,min=1"`
+}
+
 type SlotService interface {
 	Create(workshopID uuid.UUID, ownerID uuid.UUID, req *domain.CreateSlotRequest) (*domain.Slot, error)
 	GetByWorkshopID(workshopID uuid.UUID, onlyAvailable bool) ([]domain.Slot, error)
