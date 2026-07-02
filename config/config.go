@@ -15,6 +15,9 @@ type Config struct {
 	JWTExpiresIn string
 	RedisURL     string
 	FonnteToken  string
+	ResendAPIKey string
+	AppBaseURL   string // dipakai buat generate link verifikasi email, contoh: https://bengkelhub.vercel.app
+	CORSOrigins  string // comma-separated allowed origins, contoh: https://bengkelhub.vercel.app,http://localhost:3000
 }
 
 var Cfg *Config
@@ -32,6 +35,9 @@ func Load() {
 		JWTExpiresIn: getEnv("JWT_EXPIRES_IN", "24h"),
 		RedisURL:     getEnv("REDIS_URL", ""),
 		FonnteToken:  getEnv("FONNTE_TOKEN", ""),
+		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
+		AppBaseURL:   getEnv("APP_BASE_URL", "http://localhost:3000"),
+		CORSOrigins:  getEnv("APP_CORS_ORIGINS", "http://localhost:3000"),
 	}
 }
 

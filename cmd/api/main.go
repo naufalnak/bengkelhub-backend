@@ -61,10 +61,17 @@ func main() {
 	app.Use(recover.New())
 	app.Use(logger.New())
 	app.Use(cors.New(cors.Config{
-		AllowOrigins: "*",
-		AllowHeaders: "Origin, Content-Type, Accept, Authorization",
-		AllowMethods: "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+		// Baca allowed origins dari env APP_CORS_ORIGINS (comma-separated)
+		// Default: http://localhost:3000 (aman buat dev)
+		// Production: isi dengan URL frontend asli, contoh:
+		//   APP_CORS_ORIGINS=https://bengkelhub.vercel.app,https://www.bengkelhub.app
+		AllowOrigins:     config.Cfg.CORSOrigins,
+		AllowHeaders:     "Origin, Content-Type, Accept, Authorization, ngrok-skip-browser-warning",
+		AllowMethods:     "GET, POST, PUT, PATCH, DELETE, OPTIONS",
+		AllowCredentials: false,
 	}))
+	// Rate limit global: 100 req/menit per IP
+	app.Use(middleware.GlobalRateLimit())
 
 	// ── Routes ────────────────────────────────────────────
 	app.Get("/health", func(c *fiber.Ctx) error {
@@ -75,9 +82,11 @@ func main() {
 
 	// Auth
 	auth := v1.Group("/auth")
-	auth.Post("/register", authHandler.Register)
-	auth.Post("/login", authHandler.Login)
+	auth.Post("/register", middleware.AuthRateLimit(), authHandler.Register)
+	auth.Post("/login", middleware.AuthRateLimit(), authHandler.Login)
 	auth.Get("/me", middleware.Auth(), authHandler.Me)
+	auth.Get("/verify-email", authHandler.VerifyEmail)
+	auth.Post("/resend-verification", middleware.Auth(), middleware.AuthRateLimit(), authHandler.ResendVerification)
 
 	// Workshops
 	workshops := v1.Group("/workshops")
@@ -90,6 +99,7 @@ func main() {
 
 	// Slots (nested)
 	workshops.Get("/:workshopId/slots", slotHandler.GetByWorkshop)
+	workshops.Post("/:workshopId/slots/bulk", middleware.Auth(), middleware.RequireRole(domain.RoleOperator), slotHandler.BulkCreate)
 	workshops.Post("/:workshopId/slots", middleware.Auth(), middleware.RequireRole(domain.RoleOperator), slotHandler.Create)
 
 	// Orders (nested — operator)

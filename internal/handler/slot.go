@@ -106,6 +106,40 @@ func (h *SlotHandler) Create(c *fiber.Ctx) error {
 	return response.Success(c, fiber.StatusCreated, "Slot created", slot)
 }
 
+// POST /api/v1/workshops/:workshopId/slots/bulk — operator only
+// Generate banyak slot sekaligus berdasarkan rentang tanggal + hari tertentu.
+func (h *SlotHandler) BulkCreate(c *fiber.Ctx) error {
+	ownerID := c.Locals(middleware.UserIDKey).(uuid.UUID)
+
+	workshopID, err := uuid.Parse(c.Params("workshopId"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "Invalid workshop ID", nil)
+	}
+
+	var req domain.BulkCreateSlotRequest
+	if err := c.BodyParser(&req); err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "Invalid request body", nil)
+	}
+
+	if errs := validator.Validate(&req); errs != nil {
+		return response.ValidationError(c, errs)
+	}
+
+	result, err := h.slotService.BulkCreate(workshopID, ownerID, &req)
+	if err != nil {
+		switch err.Error() {
+		case "workshop not found":
+			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
+		case "forbidden: you don't own this workshop":
+			return response.Error(c, fiber.StatusForbidden, err.Error(), nil)
+		default:
+			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
+		}
+	}
+
+	return response.Success(c, fiber.StatusCreated, "Slots generated", result)
+}
+
 // PATCH /api/v1/slots/:id — operator only
 func (h *SlotHandler) Update(c *fiber.Ctx) error {
 	ownerID := c.Locals(middleware.UserIDKey).(uuid.UUID)

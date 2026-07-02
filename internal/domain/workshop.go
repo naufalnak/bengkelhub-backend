@@ -56,6 +56,21 @@ type UpdateSlotRequest struct {
 	MaxBooking int    `json:"max_booking" validate:"omitempty,min=1"`
 }
 
+// BulkCreateSlotRequest dipakai operator buat generate banyak slot sekaligus
+// berdasarkan rentang tanggal + hari tertentu, biar gak perlu klik Create satu-satu.
+type BulkCreateSlotRequest struct {
+	StartDate  string `json:"start_date" validate:"required"`             // format: 2006-01-02
+	EndDate    string `json:"end_date" validate:"required"`               // format: 2006-01-02
+	DaysOfWeek []int  `json:"days_of_week" validate:"required,min=1,dive,min=0,max=6"` // 0=Minggu ... 6=Sabtu
+	Time       string `json:"time" validate:"required"`                  // format: 15:04
+	MaxBooking int    `json:"max_booking" validate:"omitempty,min=1"`
+}
+
+type BulkCreateSlotResult struct {
+	Created []Slot `json:"created"`
+	Skipped int    `json:"skipped"` // tanggal yang dilewati: sudah lewat atau sudah ada slot di jam yang sama
+}
+
 func (s *Slot) IsAvailable() bool {
 	return s.Booked < s.MaxBooking
 }

@@ -34,14 +34,19 @@ func main() {
 	srv := asynq.NewServer(
 		opt,
 		asynq.Config{
-			Concurrency:  5,
-			Queues:       map[string]int{"default": 10, "critical": 5},
+			Concurrency: 5,
+			Queues: map[string]int{
+				"critical": 5,
+				"default":  10,
+				"email":    8, // queue khusus email, prioritas lebih tinggi dari default
+			},
 			ErrorHandler: &errorHandler{},
 		},
 	)
 
 	mux := asynq.NewServeMux()
 	mux.HandleFunc(tasks.TypeReminderBooking, worker.HandleReminderBooking)
+	mux.HandleFunc(tasks.TypeSendVerificationEmail, tasks.HandleVerificationEmailTask)
 
 	log.Println("[Worker] Starting Asynq worker...")
 	if err := srv.Run(mux); err != nil {

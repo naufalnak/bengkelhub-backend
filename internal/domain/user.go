@@ -15,14 +15,17 @@ const (
 )
 
 type User struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
-	Name      string    `gorm:"not null" json:"name"`
-	Email     string    `gorm:"uniqueIndex;not null" json:"email"`
-	Password  string    `gorm:"not null" json:"-"`
-	Phone     string    `gorm:"" json:"phone"`
-	Role      Role      `gorm:"type:varchar(20);default:'customer'" json:"role"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID               uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	Name             string     `gorm:"not null" json:"name"`
+	Email            string     `gorm:"uniqueIndex;not null" json:"email"`
+	Password         string     `gorm:"not null" json:"-"`
+	Phone            string     `gorm:"" json:"phone"`
+	Role             Role       `gorm:"type:varchar(20);default:'customer'" json:"role"`
+	EmailVerified    bool       `gorm:"default:false" json:"email_verified"`
+	VerifyToken      string     `gorm:"" json:"-"`
+	VerifyTokenExp   *time.Time `gorm:"" json:"-"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 // Request & Response DTOs
@@ -40,24 +43,28 @@ type LoginRequest struct {
 }
 
 type AuthResponse struct {
-	Token string `json:"token"`
+	Token string       `json:"token"`
 	User  UserResponse `json:"user"`
 }
 
 type UserResponse struct {
-	ID    uuid.UUID `json:"id"`
-	Name  string    `json:"name"`
-	Email string    `json:"email"`
-	Phone string    `json:"phone"`
-	Role  Role      `json:"role"`
+	ID            uuid.UUID `json:"id"`
+	Name          string    `json:"name"`
+	Email         string    `json:"email"`
+	Phone         string    `json:"phone"`
+	Role          Role      `json:"role"`
+	EmailVerified bool      `json:"email_verified"`
+	CreatedAt     time.Time `json:"created_at"`
 }
 
 func (u *User) ToResponse() UserResponse {
 	return UserResponse{
-		ID:    u.ID,
-		Name:  u.Name,
-		Email: u.Email,
-		Phone: u.Phone,
-		Role:  u.Role,
+		ID:            u.ID,
+		Name:          u.Name,
+		Email:         u.Email,
+		Phone:         u.Phone,
+		Role:          u.Role,
+		EmailVerified: u.EmailVerified,
+		CreatedAt:     u.CreatedAt,
 	}
 }

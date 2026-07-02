@@ -9,6 +9,7 @@ import (
 
 	"github.com/hibiken/asynq"
 	"github.com/naufalnak/bengkelhub-backend/config"
+	"github.com/naufalnak/bengkelhub-backend/pkg/resend"
 )
 
 var client *asynq.Client
@@ -59,6 +60,34 @@ func EnqueueReminderBooking(payload ReminderBookingPayload) error {
 
 	log.Printf("[Asynq] Reminder enqueued: id=%s queue=%s processAt=%s",
 		info.ID, info.Queue, runAt.Format(time.RFC3339))
+	return nil
+}
+
+func EnqueueVerificationEmail(payload VerificationEmailPayload) error {
+	if client == nil {
+		// Fallback: kirim langsung lewat goroutine kalau Redis tidak tersedia
+		go func() {
+			_ = resend.SendVerificationEmail(
+				payload.ToEmail, payload.ToName, payload.VerifyLink,
+			)
+		}()
+		return nil
+	}
+
+	task, err := NewVerificationEmailTask(payload)
+	if err != nil {
+		return err
+	}
+
+	info, err := client.Enqueue(task,
+		asynq.MaxRetry(3),
+		asynq.Queue("email"),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to enqueue verification email task: %w", err)
+	}
+
+	log.Printf("[Asynq] Verification email enqueued: id=%s to=%s", info.ID, payload.ToEmail)
 	return nil
 }
 
