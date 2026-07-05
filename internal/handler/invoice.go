@@ -126,3 +126,33 @@ func (h *InvoiceHandler) DeletePayment(c *fiber.Ctx) error {
 
 	return response.Success(c, fiber.StatusOK, "Payment deleted", nil)
 }
+
+// POST /api/v1/invoices/:id/checkout — operator only
+// Generate Midtrans payment URL, kembalikan invoice dengan payment_url terisi
+func (h *InvoiceHandler) Checkout(c *fiber.Ctx) error {
+	ownerID := c.Locals(middleware.UserIDKey).(uuid.UUID)
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "Invalid invoice ID", nil)
+	}
+
+	invoice, err := h.invoiceService.Checkout(id, ownerID)
+	if err != nil {
+		switch err.Error() {
+		case "invoice not found":
+			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
+		case "invoice already paid", "invoice already fully paid":
+			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
+		case "forbidden: you don't own this workshop":
+			return response.Error(c, fiber.StatusForbidden, err.Error(), nil)
+		default:
+			return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
+		}
+	}
+
+	return response.Success(c, fiber.StatusOK, "Payment URL generated", fiber.Map{
+		"payment_url":       invoice.PaymentURL,
+		"midtrans_order_id": invoice.MidtransOrderID,
+		"invoice":           invoice,
+	})
+}

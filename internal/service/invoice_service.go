@@ -7,8 +7,10 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/naufalnak/bengkelhub-backend/config"
 	"github.com/naufalnak/bengkelhub-backend/internal/domain"
 	"github.com/naufalnak/bengkelhub-backend/internal/repository"
+	mt "github.com/naufalnak/bengkelhub-backend/pkg/midtrans"
 	"gorm.io/gorm"
 )
 
@@ -16,9 +18,10 @@ type InvoiceService interface {
 	Create(workshopID, ownerID uuid.UUID, req *domain.CreateInvoiceRequest) (*domain.Invoice, error)
 	GetAll(workshopID, ownerID uuid.UUID, status string, page, limit int) ([]domain.Invoice, int64, error)
 	GetByID(id uuid.UUID) (*domain.Invoice, error)
-
 	AddPayment(invoiceID, ownerID uuid.UUID, req *domain.AddPaymentRequest) (*domain.Payment, error)
 	DeletePayment(paymentID, invoiceID, ownerID uuid.UUID) error
+	Checkout(invoiceID, ownerID uuid.UUID) (*domain.Invoice, error)
+	HandleWebhook(payload mt.WebhookPayload) error
 }
 
 type invoiceService struct {
@@ -151,7 +154,6 @@ func (s *invoiceService) AddPayment(invoiceID, ownerID uuid.UUID, req *domain.Ad
 		return nil, err
 	}
 
-	// Recalculate invoice status berdasarkan total payment terbaru
 	payments, err := s.paymentRepo.FindByInvoiceID(invoiceID)
 	if err != nil {
 		return nil, err
@@ -200,4 +202,121 @@ func (s *invoiceService) DeletePayment(paymentID, invoiceID, ownerID uuid.UUID) 
 	invoice.Payments = payments
 	invoice.RecalculateStatus()
 	return s.invoiceRepo.Update(invoice)
+}
+
+func (s *invoiceService) Checkout(invoiceID, ownerID uuid.UUID) (*domain.Invoice, error) {
+	invoice, err := s.invoiceRepo.FindByID(invoiceID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, errors.New("invoice not found")
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	if _, err := verifyWorkshopOwner(s.workshopRepo, invoice.WorkshopID, ownerID); err != nil {
+		return nil, err
+	}
+
+	if invoice.Status == domain.InvoiceStatusPaid {
+		return nil, errors.New("invoice already paid")
+	}
+
+	var totalPaid float64
+	for _, p := range invoice.Payments {
+		totalPaid += p.Amount
+	}
+	remaining := invoice.Total - totalPaid
+	if remaining <= 0 {
+		return nil, errors.New("invoice already fully paid")
+	}
+
+	midtransOrderID := fmt.Sprintf("%s-%d", invoice.InvoiceNo, time.Now().Unix())
+
+	customerDetail := mt.CustomerDetail{FirstName: "Pelanggan"}
+	if invoice.Service.Vehicle.Customer.Name != "" {
+		customerDetail.FirstName = invoice.Service.Vehicle.Customer.Name
+		customerDetail.Phone = invoice.Service.Vehicle.Customer.Phone
+		customerDetail.Email = invoice.Service.Vehicle.Customer.Email
+	}
+
+	req := mt.CreateTransactionRequest{
+		TransactionDetail: mt.TransactionDetail{
+			OrderID:     midtransOrderID,
+			GrossAmount: remaining,
+		},
+		CustomerDetail: customerDetail,
+		ItemDetails: []mt.ItemDetail{
+			{
+				ID:       invoice.InvoiceNo,
+				Name:     fmt.Sprintf("Invoice %s - %s", invoice.InvoiceNo, invoice.Service.Vehicle.PlateNumber),
+				Price:    remaining,
+				Quantity: 1,
+			},
+		},
+		Callbacks: &mt.Callbacks{
+			Finish: config.Cfg.AppBaseURL + "/payment/finish?invoice_id=" + invoiceID.String(),
+		},
+	}
+
+	result, err := mt.CreateTransaction(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create midtrans transaction: %w", err)
+	}
+
+	invoice.MidtransOrderID = midtransOrderID
+	invoice.PaymentURL = result.RedirectURL
+	if err := s.invoiceRepo.Update(invoice); err != nil {
+		return nil, err
+	}
+
+	return invoice, nil
+}
+
+func (s *invoiceService) HandleWebhook(payload mt.WebhookPayload) error {
+	if !mt.VerifySignature(payload) {
+		return errors.New("invalid webhook signature")
+	}
+
+	invoice, err := s.invoiceRepo.FindByMidtransOrderID(payload.OrderID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return errors.New("invoice not found for order_id: " + payload.OrderID)
+	}
+	if err != nil {
+		return err
+	}
+
+	if invoice.Status == domain.InvoiceStatusPaid {
+		return nil
+	}
+
+	if mt.IsPaymentSuccess(payload) {
+		var amount float64
+		fmt.Sscanf(payload.GrossAmount, "%f", &amount)
+
+		payment := &domain.Payment{
+			WorkshopID:  invoice.WorkshopID,
+			InvoiceID:   invoice.ID,
+			Amount:      amount,
+			Method:      domain.PaymentMethod(mt.PaymentMethodFromType(payload.PaymentType)),
+			ReferenceNo: payload.TransactionID,
+			Notes:       "via Midtrans - " + payload.PaymentType,
+			PaidAt:      time.Now(),
+		}
+
+		if err := s.paymentRepo.Create(payment); err != nil {
+			return fmt.Errorf("failed to create payment record: %w", err)
+		}
+
+		payments, err := s.paymentRepo.FindByInvoiceID(invoice.ID)
+		if err != nil {
+			return err
+		}
+		invoice.Payments = payments
+		invoice.RecalculateStatus()
+		if err := s.invoiceRepo.Update(invoice); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

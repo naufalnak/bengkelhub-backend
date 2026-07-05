@@ -11,6 +11,7 @@ type InvoiceRepository interface {
 	FindByWorkshopID(workshopID uuid.UUID, status string, page, limit int) ([]domain.Invoice, int64, error)
 	FindByID(id uuid.UUID) (*domain.Invoice, error)
 	FindByServiceID(serviceID uuid.UUID) (*domain.Invoice, error)
+	FindByMidtransOrderID(orderID string) (*domain.Invoice, error)
 	Update(invoice *domain.Invoice) error
 }
 
@@ -42,7 +43,8 @@ func (r *invoiceRepository) FindByWorkshopID(workshopID uuid.UUID, status string
 	}
 
 	err := query.
-		Preload("Service").Preload("Service.Vehicle").Preload("Service.Vehicle.Customer").Preload("Payments").
+		Preload("Service").Preload("Service.Vehicle").
+		Preload("Service.Vehicle.Customer").Preload("Payments").
 		Offset(offset).Limit(limit).
 		Order("created_at DESC").
 		Find(&invoices).Error
@@ -53,7 +55,8 @@ func (r *invoiceRepository) FindByWorkshopID(workshopID uuid.UUID, status string
 func (r *invoiceRepository) FindByID(id uuid.UUID) (*domain.Invoice, error) {
 	var invoice domain.Invoice
 	err := r.db.
-		Preload("Service").Preload("Service.Vehicle").Preload("Service.Vehicle.Customer").Preload("Payments").
+		Preload("Service").Preload("Service.Vehicle").
+		Preload("Service.Vehicle.Customer").Preload("Payments").
 		First(&invoice, "id = ?", id).Error
 	if err != nil {
 		return nil, err
@@ -64,6 +67,17 @@ func (r *invoiceRepository) FindByID(id uuid.UUID) (*domain.Invoice, error) {
 func (r *invoiceRepository) FindByServiceID(serviceID uuid.UUID) (*domain.Invoice, error) {
 	var invoice domain.Invoice
 	err := r.db.Where("service_id = ?", serviceID).First(&invoice).Error
+	if err != nil {
+		return nil, err
+	}
+	return &invoice, nil
+}
+
+func (r *invoiceRepository) FindByMidtransOrderID(orderID string) (*domain.Invoice, error) {
+	var invoice domain.Invoice
+	err := r.db.
+		Preload("Payments").
+		Where("midtrans_order_id = ?", orderID).First(&invoice).Error
 	if err != nil {
 		return nil, err
 	}
