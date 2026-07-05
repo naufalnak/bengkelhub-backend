@@ -162,6 +162,8 @@ func main() {
 	invoices.Delete("/:id/payments/:paymentId", invoiceHandler.DeletePayment)
 	// Checkout: generate Midtrans payment URL
 	invoices.Post("/:id/checkout", invoiceHandler.Checkout)
+	// Kirim ringkasan invoice ke WA customer via Fonnte
+	invoices.Post("/:id/send-whatsapp", invoiceHandler.SendWhatsapp)
 
 	// Laporan
 	workshops.Get("/:workshopId/laporan", opAuth, opRole, laporanHandler.GetMonthly)

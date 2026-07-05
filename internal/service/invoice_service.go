@@ -10,6 +10,7 @@ import (
 	"github.com/naufalnak/bengkelhub-backend/config"
 	"github.com/naufalnak/bengkelhub-backend/internal/domain"
 	"github.com/naufalnak/bengkelhub-backend/internal/repository"
+	"github.com/naufalnak/bengkelhub-backend/pkg/fonnte"
 	mt "github.com/naufalnak/bengkelhub-backend/pkg/midtrans"
 	"gorm.io/gorm"
 )
@@ -21,6 +22,7 @@ type InvoiceService interface {
 	AddPayment(invoiceID, ownerID uuid.UUID, req *domain.AddPaymentRequest) (*domain.Payment, error)
 	DeletePayment(paymentID, invoiceID, ownerID uuid.UUID) error
 	Checkout(invoiceID, ownerID uuid.UUID) (*domain.Invoice, error)
+	SendWhatsapp(invoiceID, ownerID uuid.UUID) error
 	HandleWebhook(payload mt.WebhookPayload) error
 }
 
@@ -270,6 +272,34 @@ func (s *invoiceService) Checkout(invoiceID, ownerID uuid.UUID) (*domain.Invoice
 	}
 
 	return invoice, nil
+}
+
+func (s *invoiceService) SendWhatsapp(invoiceID, ownerID uuid.UUID) error {
+	invoice, err := s.invoiceRepo.FindByID(invoiceID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return errors.New("invoice not found")
+	}
+	if err != nil {
+		return err
+	}
+
+	workshop, err := verifyWorkshopOwner(s.workshopRepo, invoice.WorkshopID, ownerID)
+	if err != nil {
+		return err
+	}
+
+	customer := invoice.Service.Vehicle.Customer
+	if customer.Phone == "" {
+		return errors.New("customer phone not available")
+	}
+
+	msg := buildInvoiceWhatsappMessage(invoice, workshop.Name, customer.Name)
+
+	if err := fonnte.Send(customer.Phone, msg); err != nil {
+		return fmt.Errorf("failed to send WA message: %w", err)
+	}
+
+	return nil
 }
 
 func (s *invoiceService) HandleWebhook(payload mt.WebhookPayload) error {

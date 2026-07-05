@@ -156,3 +156,28 @@ func (h *InvoiceHandler) Checkout(c *fiber.Ctx) error {
 		"invoice":           invoice,
 	})
 }
+
+// POST /api/v1/invoices/:id/send-whatsapp — operator only
+// Kirim ringkasan invoice (no. invoice, total, status, link bayar) ke WA customer via Fonnte.
+func (h *InvoiceHandler) SendWhatsapp(c *fiber.Ctx) error {
+	ownerID := c.Locals(middleware.UserIDKey).(uuid.UUID)
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "Invalid invoice ID", nil)
+	}
+
+	if err := h.invoiceService.SendWhatsapp(id, ownerID); err != nil {
+		switch err.Error() {
+		case "invoice not found":
+			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
+		case "customer phone not available":
+			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
+		case "forbidden: you don't own this workshop":
+			return response.Error(c, fiber.StatusForbidden, err.Error(), nil)
+		default:
+			return response.Error(c, fiber.StatusBadGateway, err.Error(), nil)
+		}
+	}
+
+	return response.Success(c, fiber.StatusOK, "WhatsApp message sent", nil)
+}
