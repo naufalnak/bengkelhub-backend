@@ -33,7 +33,7 @@ type RegisterRequest struct {
 	Name     string `json:"name" validate:"required,min=2"`
 	Email    string `json:"email" validate:"required,email"`
 	Password string `json:"password" validate:"required,min=8"`
-	Phone    string `json:"phone" validate:"omitempty,e164"`
+	Phone    string `json:"phone" validate:"required,e164"`
 	Role     Role   `json:"role" validate:"omitempty,oneof=customer operator"`
 }
 

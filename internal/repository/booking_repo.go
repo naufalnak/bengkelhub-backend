@@ -13,6 +13,7 @@ type OrderRepository interface {
 	FindByCustomerID(customerID uuid.UUID, page, limit int) ([]domain.Order, int64, error)
 	FindByWorkshopID(workshopID uuid.UUID, page, limit int) ([]domain.Order, int64, error)
 	UpdateStatus(id uuid.UUID, status domain.BookingStatus) error
+	UpdateServiceID(id uuid.UUID, serviceID uuid.UUID) error
 }
 
 type orderRepository struct {
@@ -103,4 +104,11 @@ func (r *orderRepository) UpdateStatus(id uuid.UUID, status domain.BookingStatus
 	return r.db.Model(&domain.Order{}).
 		Where("id = ?", id).
 		Update("status", status).Error
+}
+
+// UpdateServiceID nyimpen link order → service hasil konversi (ConvertToService).
+func (r *orderRepository) UpdateServiceID(id uuid.UUID, serviceID uuid.UUID) error {
+	return r.db.Model(&domain.Order{}).
+		Where("id = ?", id).
+		Update("service_id", serviceID).Error
 }

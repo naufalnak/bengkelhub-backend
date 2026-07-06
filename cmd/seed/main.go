@@ -25,6 +25,16 @@ func hashPassword(pw string) string {
 
 func ptr[T any](v T) *T { return &v }
 
+// must bikin proses langsung berhenti dgn pesan jelas kalau ada error —
+// dipakai buat bungkus semua FirstOrCreate/Create yang sebelumnya errornya
+// gak dicek sama sekali (jadi kalau gagal, diam-diam kelewat & "Seeding
+// selesai!" tetap muncul padahal ada data yang gak kebuat).
+func must(err error, context string) {
+	if err != nil {
+		log.Fatalf("❌  Gagal %s: %v", context, err)
+	}
+}
+
 func serviceNo() string {
 	return fmt.Sprintf("SRV-%s-%04d", time.Now().Format("20060102"), rand.Intn(9999)+1)
 }
@@ -39,6 +49,25 @@ func main() {
 	config.Load()
 	config.ConnectDB()
 	db := config.DB
+
+	// AutoMigrate juga dijalankan di sini (bukan cuma di cmd/api) — supaya
+	// `go run ./cmd/seed` tetap jalan mulus meskipun cmd/api belum pernah
+	// di-restart setelah ada perubahan schema (mis. kolom service_id baru).
+	log.Println("🔧  Running migrations...")
+	if err := db.AutoMigrate(
+		&domain.User{},
+		&domain.Workshop{},
+		&domain.Slot{},
+		&domain.Order{},
+		&domain.Customer{},
+		&domain.Vehicle{},
+		&domain.Service{},
+		&domain.ServiceItem{},
+		&domain.Invoice{},
+		&domain.Payment{},
+	); err != nil {
+		log.Fatalf("AutoMigrate failed: %v", err)
+	}
 
 	// Kalau ada flag --fresh, hapus semua data dulu sebelum seed
 	fresh := len(os.Args) > 1 && os.Args[1] == "--fresh"
@@ -84,8 +113,20 @@ func main() {
 		Role:          domain.RoleCustomer,
 		EmailVerified: true,
 	}
+	// Sengaja TANPA nomor HP — simulasi akun lama yang daftar sebelum validasi
+	// phone wajib diterapkan. Dipakai buat tes error "customer phone not
+	// available" pas operator klik "Proses jadi Servis" (lihat order3).
+	cust2 := &domain.User{
+		Name:          "Rian Customer Lama",
+		Email:         "rian.lama@bengkelhub.test",
+		Password:      hashPassword("password123"),
+		Phone:         "",
+		Role:          domain.RoleCustomer,
+		EmailVerified: true,
+	}
 
 	upsertUser(db, cust1)
+	upsertUser(db, cust2)
 
 	// ── 3. Workshops ──────────────────────────────────────────────────────────
 	log.Println("→ Creating workshops...")
@@ -118,15 +159,13 @@ func main() {
 	log.Println("→ Creating slots...")
 
 	now := time.Now()
-	slotDates := []time.Time{
-		time.Date(now.Year(), now.Month(), now.Day()+1, 9, 0, 0, 0, time.Local),
-		time.Date(now.Year(), now.Month(), now.Day()+1, 11, 0, 0, 0, time.Local),
-		time.Date(now.Year(), now.Month(), now.Day()+2, 9, 0, 0, 0, time.Local),
-		time.Date(now.Year(), now.Month(), now.Day()+3, 10, 0, 0, 0, time.Local),
-	}
-	for _, d := range slotDates {
-		slot := &domain.Slot{WorkshopID: ws1.ID, Date: d, MaxBooking: 5, Booked: 0}
-		db.Where("workshop_id = ? AND date = ?", slot.WorkshopID, slot.Date).FirstOrCreate(slot)
+	slotWs1TomorrowAM := &domain.Slot{WorkshopID: ws1.ID, Date: time.Date(now.Year(), now.Month(), now.Day()+1, 9, 0, 0, 0, time.Local), MaxBooking: 5, Booked: 0}
+	slotWs1TomorrowPM := &domain.Slot{WorkshopID: ws1.ID, Date: time.Date(now.Year(), now.Month(), now.Day()+1, 11, 0, 0, 0, time.Local), MaxBooking: 5, Booked: 0}
+	slotWs1Plus2 := &domain.Slot{WorkshopID: ws1.ID, Date: time.Date(now.Year(), now.Month(), now.Day()+2, 9, 0, 0, 0, time.Local), MaxBooking: 5, Booked: 0}
+	slotWs1Plus3 := &domain.Slot{WorkshopID: ws1.ID, Date: time.Date(now.Year(), now.Month(), now.Day()+3, 10, 0, 0, 0, time.Local), MaxBooking: 5, Booked: 0}
+	slotWs1Plus4 := &domain.Slot{WorkshopID: ws1.ID, Date: time.Date(now.Year(), now.Month(), now.Day()+4, 9, 0, 0, 0, time.Local), MaxBooking: 5, Booked: 0}
+	for _, s := range []*domain.Slot{slotWs1TomorrowAM, slotWs1TomorrowPM, slotWs1Plus2, slotWs1Plus3, slotWs1Plus4} {
+		must(db.Where("workshop_id = ? AND date = ?", s.WorkshopID, s.Date).FirstOrCreate(s).Error, "create s")
 	}
 	// Slot ws2
 	slot2 := &domain.Slot{
@@ -135,7 +174,7 @@ func main() {
 		MaxBooking: 3,
 		Booked:     0,
 	}
-	db.Where("workshop_id = ? AND date = ?", slot2.WorkshopID, slot2.Date).FirstOrCreate(slot2)
+	must(db.Where("workshop_id = ? AND date = ?", slot2.WorkshopID, slot2.Date).FirstOrCreate(slot2).Error, "create slot2")
 
 	// ── 5. Walk-in Customers (data internal bengkel, bukan akun login) ────────
 	log.Println("→ Creating walk-in customers...")
@@ -148,8 +187,8 @@ func main() {
 		{WorkshopID: ws2.ID, Name: "Doni Setiawan", Phone: "+6281234000005", Email: "", Address: "Jl. Pahlawan No. 3"},
 	}
 	for i := range wCustomers {
-		db.Where("workshop_id = ? AND phone = ?", wCustomers[i].WorkshopID, wCustomers[i].Phone).
-			FirstOrCreate(&wCustomers[i])
+		must(db.Where("workshop_id = ? AND phone = ?", wCustomers[i].WorkshopID, wCustomers[i].Phone).
+			FirstOrCreate(&wCustomers[i]).Error, "create walk-in customer")
 	}
 
 	// ── 6. Vehicles ───────────────────────────────────────────────────────────
@@ -164,8 +203,8 @@ func main() {
 		{WorkshopID: ws2.ID, CustomerID: wCustomers[4].ID, PlateNumber: "T 2222 BBB", Brand: "Daihatsu", Model: "Xenia", Year: 2018, Color: "Abu-abu", EngineCC: 1300},
 	}
 	for i := range vehicles {
-		db.Where("workshop_id = ? AND plate_number = ?", vehicles[i].WorkshopID, vehicles[i].PlateNumber).
-			FirstOrCreate(&vehicles[i])
+		must(db.Where("workshop_id = ? AND plate_number = ?", vehicles[i].WorkshopID, vehicles[i].PlateNumber).
+			FirstOrCreate(&vehicles[i]).Error, "create vehicle")
 	}
 
 	// ── 7. Services ───────────────────────────────────────────────────────────
@@ -183,7 +222,7 @@ func main() {
 		StartDate:  time.Now().Add(-48 * time.Hour),
 		EndDate:    ptr(time.Now().Add(-24 * time.Hour)),
 	}
-	db.Where("service_no = ?", svc1.ServiceNo).FirstOrCreate(svc1)
+	must(db.Where("service_no = ?", svc1.ServiceNo).FirstOrCreate(svc1).Error, "create svc1")
 
 	// Service 1 items
 	items1 := []domain.ServiceItem{
@@ -192,7 +231,7 @@ func main() {
 		{ServiceID: svc1.ID, Name: "Jasa Servis", Description: "Ganti oli + cek rem", Qty: 1, UnitPrice: 50000, Total: 50000},
 	}
 	for i := range items1 {
-		db.Where("service_id = ? AND name = ?", items1[i].ServiceID, items1[i].Name).FirstOrCreate(&items1[i])
+		must(db.Where("service_id = ? AND name = ?", items1[i].ServiceID, items1[i].Name).FirstOrCreate(&items1[i]).Error, "create items1[i]")
 	}
 
 	// Invoice untuk svc1 (sudah lunas)
@@ -207,7 +246,7 @@ func main() {
 		Status:     domain.InvoiceStatusPaid,
 		DueDate:    ptr(time.Now().Add(7 * 24 * time.Hour)),
 	}
-	db.Where("invoice_no = ?", inv1.InvoiceNo).FirstOrCreate(inv1)
+	must(db.Where("invoice_no = ?", inv1.InvoiceNo).FirstOrCreate(inv1).Error, "create inv1")
 
 	pay1 := &domain.Payment{
 		WorkshopID: ws1.ID,
@@ -217,7 +256,7 @@ func main() {
 		Notes:      "Bayar tunai lunas",
 		PaidAt:     time.Now().Add(-20 * time.Hour),
 	}
-	db.Where("invoice_id = ? AND amount = ?", pay1.InvoiceID, pay1.Amount).FirstOrCreate(pay1)
+	must(db.Where("invoice_id = ? AND amount = ?", pay1.InvoiceID, pay1.Amount).FirstOrCreate(pay1).Error, "create pay1")
 
 	// Service 2: sedang dikerjakan, ada items, belum invoice
 	svc2 := &domain.Service{
@@ -229,14 +268,14 @@ func main() {
 		Status:     domain.ServiceStatusInProgress,
 		StartDate:  time.Now().Add(-2 * time.Hour),
 	}
-	db.Where("service_no = ?", svc2.ServiceNo).FirstOrCreate(svc2)
+	must(db.Where("service_no = ?", svc2.ServiceNo).FirstOrCreate(svc2).Error, "create svc2")
 
 	items2 := []domain.ServiceItem{
 		{ServiceID: svc2.ID, Name: "Freon AC R32", Qty: 1, UnitPrice: 150000, Total: 150000},
 		{ServiceID: svc2.ID, Name: "Jasa Isi Freon", Qty: 1, UnitPrice: 75000, Total: 75000},
 	}
 	for i := range items2 {
-		db.Where("service_id = ? AND name = ?", items2[i].ServiceID, items2[i].Name).FirstOrCreate(&items2[i])
+		must(db.Where("service_id = ? AND name = ?", items2[i].ServiceID, items2[i].Name).FirstOrCreate(&items2[i]).Error, "create items2[i]")
 	}
 
 	// Service 3: baru masuk, pending
@@ -248,7 +287,7 @@ func main() {
 		Status:     domain.ServiceStatusPending,
 		StartDate:  time.Now(),
 	}
-	db.Where("service_no = ?", svc3.ServiceNo).FirstOrCreate(svc3)
+	must(db.Where("service_no = ?", svc3.ServiceNo).FirstOrCreate(svc3).Error, "create svc3")
 
 	// Service 4: di workshop 2, sudah selesai, partial payment
 	svc4 := &domain.Service{
@@ -261,7 +300,7 @@ func main() {
 		StartDate:  time.Now().Add(-72 * time.Hour),
 		EndDate:    ptr(time.Now().Add(-48 * time.Hour)),
 	}
-	db.Where("service_no = ?", svc4.ServiceNo).FirstOrCreate(svc4)
+	must(db.Where("service_no = ?", svc4.ServiceNo).FirstOrCreate(svc4).Error, "create svc4")
 
 	items4 := []domain.ServiceItem{
 		{ServiceID: svc4.ID, Name: "Filter Udara", Qty: 1, UnitPrice: 65000, Total: 65000},
@@ -269,7 +308,7 @@ func main() {
 		{ServiceID: svc4.ID, Name: "Jasa Tune Up", Qty: 1, UnitPrice: 100000, Total: 100000},
 	}
 	for i := range items4 {
-		db.Where("service_id = ? AND name = ?", items4[i].ServiceID, items4[i].Name).FirstOrCreate(&items4[i])
+		must(db.Where("service_id = ? AND name = ?", items4[i].ServiceID, items4[i].Name).FirstOrCreate(&items4[i]).Error, "create items4[i]")
 	}
 
 	// Invoice ws2 (sebagian dibayar)
@@ -283,7 +322,7 @@ func main() {
 		Total:      300000,
 		Status:     domain.InvoiceStatusPartial,
 	}
-	db.Where("invoice_no = ?", inv2.InvoiceNo).FirstOrCreate(inv2)
+	must(db.Where("invoice_no = ?", inv2.InvoiceNo).FirstOrCreate(inv2).Error, "create inv2")
 
 	pay2 := &domain.Payment{
 		WorkshopID:  ws2.ID,
@@ -294,48 +333,133 @@ func main() {
 		Notes:       "DP via transfer",
 		PaidAt:      time.Now().Add(-45 * time.Hour),
 	}
-	db.Where("invoice_id = ? AND reference_no = ?", pay2.InvoiceID, pay2.ReferenceNo).FirstOrCreate(pay2)
+	must(db.Where("invoice_id = ? AND reference_no = ?", pay2.InvoiceID, pay2.ReferenceNo).FirstOrCreate(pay2).Error, "create pay2")
 
 	// ── 8. Booking orders (publik) ────────────────────────────────────────────
+	// Sengaja dibikin variatif buat nge-tes tombol "Proses jadi Servis":
+	//   order1 → confirmed, belum diproses        → tombol convert HARUS muncul & sukses
+	//   order2 → pending, plat SAMA dgn vehicles[0] (B 1234 ABC) TAPI beda customer
+	//            (vehicles[0] punya Hendra Gunawan, order2 punya Andi Customer/cust1) →
+	//            begitu di-confirm & convert, HARUS bikin Vehicle baru khusus buat
+	//            Andi Customer, BUKAN nyambung ke vehicle Hendra Gunawan yang gak related
+	//   order3 → confirmed, customer TANPA nomor HP (cust2) → convert harus GAGAL dgn pesan
+	//            "customer phone not available"
+	//   order4 → cancelled                        → convert harus GAGAL dgn pesan
+	//            "cannot convert a cancelled order"
+	//   order5 → done, SUDAH pernah diproses (service_id keisi) → tombol harus jadi
+	//            "Sudah diproses — lihat detail", bukan tombol convert lagi
 	log.Println("→ Creating booking orders...")
 
 	order1 := &domain.Order{
 		CustomerID:   cust1.ID,
 		WorkshopID:   ws1.ID,
-		SlotID:       slot2.ID,
+		SlotID:       slotWs1TomorrowAM.ID,
 		Status:       "confirmed",
 		Notes:        "Ganti oli dan cek rem belakang",
 		VehicleType:  "Honda Beat 2022",
 		VehiclePlate: "B 9999 ZZZ",
 	}
-	db.Where("customer_id = ? AND workshop_id = ? AND vehicle_plate = ?",
-		order1.CustomerID, order1.WorkshopID, order1.VehiclePlate).FirstOrCreate(order1)
+	must(db.Where("customer_id = ? AND workshop_id = ? AND vehicle_plate = ?",
+		order1.CustomerID, order1.WorkshopID, order1.VehiclePlate).FirstOrCreate(order1).Error, "create order1")
+
+	order2 := &domain.Order{
+		CustomerID:   cust1.ID,
+		WorkshopID:   ws1.ID,
+		SlotID:       slotWs1TomorrowPM.ID,
+		Status:       "pending",
+		Notes:        "Ganti oli rutin",
+		VehicleType:  "FreeGo",
+		VehiclePlate: "B 1234 ABC", // sengaja sama dgn vehicles[0], buat tes dedup
+	}
+	must(db.Where("customer_id = ? AND workshop_id = ? AND vehicle_plate = ?",
+		order2.CustomerID, order2.WorkshopID, order2.VehiclePlate).FirstOrCreate(order2).Error, "create order2")
+
+	order3 := &domain.Order{
+		CustomerID:   cust2.ID, // customer tanpa nomor HP
+		WorkshopID:   ws1.ID,
+		SlotID:       slotWs1Plus2.ID,
+		Status:       "confirmed",
+		Notes:        "",
+		VehicleType:  "Honda Scoopy 2022",
+		VehiclePlate: "B 7777 XYZ",
+	}
+	must(db.Where("customer_id = ? AND workshop_id = ? AND vehicle_plate = ?",
+		order3.CustomerID, order3.WorkshopID, order3.VehiclePlate).FirstOrCreate(order3).Error, "create order3")
+
+	order4 := &domain.Order{
+		CustomerID:   cust1.ID,
+		WorkshopID:   ws1.ID,
+		SlotID:       slotWs1Plus3.ID,
+		Status:       "cancelled",
+		Notes:        "Servis rutin",
+		VehicleType:  "Yamaha Mio",
+		VehiclePlate: "B 8888 CCC",
+	}
+	must(db.Where("customer_id = ? AND workshop_id = ? AND vehicle_plate = ?",
+		order4.CustomerID, order4.WorkshopID, order4.VehiclePlate).FirstOrCreate(order4).Error, "create order4")
+
+	// order5: simulasi booking yang SUDAH diproses jadi servis sebelumnya —
+	// Customer, Vehicle, Service-nya dibuat manual di sini persis seperti
+	// hasil yang akan dibuat ConvertToService(), lalu di-link ke order.
+	customer5 := &domain.Customer{WorkshopID: ws1.ID, Name: cust1.Name, Phone: cust1.Phone, Email: cust1.Email}
+	must(db.Where("workshop_id = ? AND phone = ?", customer5.WorkshopID, customer5.Phone).FirstOrCreate(customer5).Error, "create customer5")
+
+	vehicle5 := &domain.Vehicle{WorkshopID: ws1.ID, CustomerID: customer5.ID, PlateNumber: "B 5555 DDD", Model: "Honda Vario 160"}
+	must(db.Where("workshop_id = ? AND plate_number = ?", vehicle5.WorkshopID, vehicle5.PlateNumber).FirstOrCreate(vehicle5).Error, "create vehicle5")
+
+	svc5 := &domain.Service{
+		WorkshopID: ws1.ID,
+		VehicleID:  vehicle5.ID,
+		ServiceNo:  "SRV-DEMO-0005",
+		Complaint:  "Servis rutin dari booking online",
+		Status:     domain.ServiceStatusPending,
+		StartDate:  time.Now(),
+	}
+	must(db.Where("service_no = ?", svc5.ServiceNo).FirstOrCreate(svc5).Error, "create svc5")
+
+	order5 := &domain.Order{
+		CustomerID:   cust1.ID,
+		WorkshopID:   ws1.ID,
+		SlotID:       slotWs1Plus4.ID,
+		Status:       "done",
+		Notes:        "Servis rutin dari booking online",
+		VehicleType:  "Honda Vario 160",
+		VehiclePlate: "B 5555 DDD",
+		ServiceID:    &svc5.ID,
+	}
+	must(db.Where("customer_id = ? AND workshop_id = ? AND vehicle_plate = ?",
+		order5.CustomerID, order5.WorkshopID, order5.VehiclePlate).FirstOrCreate(order5).Error, "create order5")
 
 	// ── Done ──────────────────────────────────────────────────────────────────
 
 	log.Println("")
 	log.Println("✅  Seeding selesai! Berikut akun yang dibuat:")
 	log.Println("")
-	log.Println("┌─────────────────────────────────────────────────────┐")
-	log.Println("│  OPERATOR                                           │")
-	log.Printf("│  Email : %-40s │", op1.Email)
-	log.Printf("│  Email : %-40s │", op2.Email)
-	log.Println("│  Password: password123                              │")
-	log.Println("├─────────────────────────────────────────────────────┤")
-	log.Println("│  CUSTOMER (akun login)                              │")
-	log.Printf("│  Email : %-40s │", cust1.Email)
-	log.Println("│  Password: password123                              │")
-	log.Println("├─────────────────────────────────────────────────────┤")
-	log.Println("│  DATA YANG DIBUAT                                   │")
-	log.Println("│  - 2 workshop                                       │")
-	log.Println("│  - 5 slot booking                                   │")
-	log.Println("│  - 5 pelanggan walk-in                              │")
-	log.Println("│  - 6 kendaraan                                      │")
-	log.Println("│  - 4 servis (done/in_progress/pending)              │")
-	log.Println("│  - 2 invoice (paid + partial)                       │")
-	log.Println("│  - 2 payment                                        │")
-	log.Println("│  - 1 booking online                                 │")
-	log.Println("└─────────────────────────────────────────────────────┘")
+	log.Println("=== OPERATOR ===")
+	log.Printf("  Email : %s", op1.Email)
+	log.Printf("  Email : %s", op2.Email)
+	log.Println("  Password: password123")
+	log.Println("")
+	log.Println("=== CUSTOMER (akun login) ===")
+	log.Printf("  Email : %s", cust1.Email)
+	log.Printf("  Email : %s  (TANPA nomor HP — buat tes edge case)", cust2.Email)
+	log.Println("  Password: password123")
+	log.Println("")
+	log.Println("=== DATA YANG DIBUAT ===")
+	log.Println("  - 2 workshop")
+	log.Println("  - 6 slot booking")
+	log.Println("  - 5 pelanggan walk-in + 1 dari konversi order5")
+	log.Println("  - 7 kendaraan")
+	log.Println("  - 5 servis (done/in_progress/pending)")
+	log.Println("  - 2 invoice (paid + partial)")
+	log.Println("  - 2 payment")
+	log.Println("  - 5 booking online, buat tes \"Proses jadi Servis\":")
+	log.Println("      order1 confirmed  -> convert harus SUKSES")
+	log.Println("      order2 pending    -> convert button belum muncul; plat sama dgn vehicles[0]")
+	log.Println("                          TAPI beda customer -> harus bikin Vehicle baru, bukan nyambung")
+	log.Println("      order3 confirmed  -> customer tanpa HP, convert harus GAGAL")
+	log.Println("      order4 cancelled  -> convert harus GAGAL")
+	log.Println("      order5 done       -> sudah pernah diproses")
 }
 
 func upsertUser(db *gorm.DB, u *domain.User) {

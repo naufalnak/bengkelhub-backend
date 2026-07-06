@@ -21,7 +21,8 @@ type sendRequest struct {
 
 type sendResponse struct {
 	Status  bool   `json:"status"`
-	Message string `json:"message"`
+	Reason  string `json:"reason"`  // Fonnte balikin alasan gagal di field "reason", BUKAN "message"
+	Message string `json:"message"` // beberapa endpoint/versi Fonnte lain pakai "message" — disimpan juga buat jaga-jaga
 }
 
 // Send kirim pesan WA ke nomor target (format: 628xxx)
@@ -63,7 +64,16 @@ func Send(phone, message string) error {
 	}
 
 	if !result.Status {
-		return fmt.Errorf("Fonnte error: %s", result.Message)
+		reason := result.Reason
+		if reason == "" {
+			reason = result.Message
+		}
+		if reason == "" {
+			// Jaga-jaga kalau Fonnte suatu saat ganti lagi nama field-nya —
+			// biar errornya tetap informatif (nunjukin raw response), bukan kosong.
+			reason = string(body)
+		}
+		return fmt.Errorf("Fonnte error: %s", reason)
 	}
 
 	log.Printf("[Fonnte] Message sent to %s", phone)

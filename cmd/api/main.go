@@ -52,7 +52,7 @@ func main() {
 	authSvc        := service.NewAuthService(userRepo)
 	workshopSvc    := service.NewWorkshopService(workshopRepo)
 	slotSvc        := service.NewSlotService(slotRepo, workshopRepo)
-	orderSvc       := service.NewOrderService(orderRepo, slotRepo, workshopRepo, userRepo)
+	orderSvc       := service.NewOrderService(orderRepo, slotRepo, workshopRepo, userRepo, customerRepo, vehicleRepo, serviceRepo)
 	customerSvc    := service.NewCustomerService(customerRepo, workshopRepo)
 	vehicleSvc     := service.NewVehicleService(vehicleRepo, customerRepo, workshopRepo)
 	serviceMgmtSvc := service.NewServiceManagementService(serviceRepo, vehicleRepo, workshopRepo)
@@ -181,6 +181,8 @@ func main() {
 	orders.Get("/:id", orderHandler.GetByID)
 	orders.Patch("/:id/status", middleware.RequireRole(domain.RoleOperator), orderHandler.UpdateStatus)
 	orders.Patch("/:id/cancel", middleware.RequireRole(domain.RoleCustomer), orderHandler.Cancel)
+	// Konversi booking jadi Customer + Vehicle + Service internal
+	orders.Post("/:id/convert-to-service", middleware.RequireRole(domain.RoleOperator), orderHandler.ConvertToService)
 
 	// Webhook Midtrans — PUBLIC, tidak butuh JWT, diverifikasi via signature
 	v1.Post("/webhooks/payment", webhookHandler.HandlePayment)

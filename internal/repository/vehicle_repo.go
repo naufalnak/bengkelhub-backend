@@ -11,6 +11,8 @@ type VehicleRepository interface {
 	FindByWorkshopID(workshopID uuid.UUID, search string, page, limit int) ([]domain.Vehicle, int64, error)
 	FindByCustomerID(customerID uuid.UUID) ([]domain.Vehicle, error)
 	FindByID(id uuid.UUID) (*domain.Vehicle, error)
+	FindByPlateNumber(workshopID uuid.UUID, plateNumber string) (*domain.Vehicle, error)
+	FindByCustomerAndPlate(workshopID, customerID uuid.UUID, plateNumber string) (*domain.Vehicle, error)
 	Update(vehicle *domain.Vehicle) error
 	Delete(id uuid.UUID) error
 }
@@ -60,6 +62,33 @@ func (r *vehicleRepository) FindByCustomerID(customerID uuid.UUID) ([]domain.Veh
 func (r *vehicleRepository) FindByID(id uuid.UUID) (*domain.Vehicle, error) {
 	var vehicle domain.Vehicle
 	err := r.db.Preload("Customer").First(&vehicle, "id = ?", id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &vehicle, nil
+}
+
+// FindByPlateNumber dipakai buat cari vehicle existing (dalam satu workshop) berdasarkan
+// plat nomor doang — HATI-HATI: ini gak peduli siapa pemiliknya, jadi kalau plat yang sama
+// kebetulan udah ada punya customer lain, method ini bakal ketemu punya customer itu juga.
+// Buat proses convert booking → servis, pakai FindByCustomerAndPlate() di bawah, BUKAN ini.
+func (r *vehicleRepository) FindByPlateNumber(workshopID uuid.UUID, plateNumber string) (*domain.Vehicle, error) {
+	var vehicle domain.Vehicle
+	err := r.db.Where("workshop_id = ? AND plate_number = ?", workshopID, plateNumber).First(&vehicle).Error
+	if err != nil {
+		return nil, err
+	}
+	return &vehicle, nil
+}
+
+// FindByCustomerAndPlate cari vehicle berdasarkan plat nomor YANG JUGA harus dimiliki
+// customer yang sama. Ini sengaja di-scope ke customer_id juga (bukan cuma plate_number)
+// supaya kalau ada 2 customer berbeda yang kebetulan input plat yang sama (typo, data
+// testing, dll), booking/servis salah satu customer gak "nyasar" ke riwayat kendaraan
+// customer lain yang gak related — vehicle baru bakal dibuatkan khusus buat customer ini.
+func (r *vehicleRepository) FindByCustomerAndPlate(workshopID, customerID uuid.UUID, plateNumber string) (*domain.Vehicle, error) {
+	var vehicle domain.Vehicle
+	err := r.db.Where("workshop_id = ? AND customer_id = ? AND plate_number = ?", workshopID, customerID, plateNumber).First(&vehicle).Error
 	if err != nil {
 		return nil, err
 	}

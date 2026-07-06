@@ -10,6 +10,7 @@ type CustomerRepository interface {
 	Create(customer *domain.Customer) error
 	FindByWorkshopID(workshopID uuid.UUID, search string, page, limit int) ([]domain.Customer, int64, error)
 	FindByID(id uuid.UUID) (*domain.Customer, error)
+	FindByPhone(workshopID uuid.UUID, phone string) (*domain.Customer, error)
 	Update(customer *domain.Customer) error
 	Delete(id uuid.UUID) error
 }
@@ -52,6 +53,17 @@ func (r *customerRepository) FindByWorkshopID(workshopID uuid.UUID, search strin
 func (r *customerRepository) FindByID(id uuid.UUID) (*domain.Customer, error) {
 	var customer domain.Customer
 	err := r.db.First(&customer, "id = ?", id).Error
+	if err != nil {
+		return nil, err
+	}
+	return &customer, nil
+}
+
+// FindByPhone dipakai buat cari customer existing (dalam satu workshop) berdasarkan
+// nomor HP — dipakai saat konversi Order jadi Service biar gak bikin duplikat.
+func (r *customerRepository) FindByPhone(workshopID uuid.UUID, phone string) (*domain.Customer, error) {
+	var customer domain.Customer
+	err := r.db.Where("workshop_id = ? AND phone = ?", workshopID, phone).First(&customer).Error
 	if err != nil {
 		return nil, err
 	}

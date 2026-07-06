@@ -175,3 +175,33 @@ func (h *OrderHandler) Cancel(c *fiber.Ctx) error {
 
 	return response.Success(c, fiber.StatusOK, "Order cancelled", nil)
 }
+
+// POST /api/v1/orders/:id/convert-to-service — operator only
+// Konversi booking (Order) jadi Customer + Vehicle + Service internal sekaligus,
+// biar operator gak perlu input manual data yang sama berkali-kali.
+func (h *OrderHandler) ConvertToService(c *fiber.Ctx) error {
+	ownerID := c.Locals(middleware.UserIDKey).(uuid.UUID)
+
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return response.Error(c, fiber.StatusBadRequest, "Invalid order ID", nil)
+	}
+
+	svc, err := h.orderService.ConvertToService(id, ownerID)
+	if err != nil {
+		switch err.Error() {
+		case "order not found":
+			return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
+		case "order already converted to service":
+			return response.Error(c, fiber.StatusConflict, err.Error(), nil)
+		case "cannot convert a cancelled order", "customer phone not available":
+			return response.Error(c, fiber.StatusBadRequest, err.Error(), nil)
+		case "forbidden: you don't own this workshop":
+			return response.Error(c, fiber.StatusForbidden, err.Error(), nil)
+		default:
+			return response.Error(c, fiber.StatusInternalServerError, err.Error(), nil)
+		}
+	}
+
+	return response.Success(c, fiber.StatusCreated, "Order converted to service", svc)
+}

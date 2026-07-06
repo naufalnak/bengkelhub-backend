@@ -27,6 +27,9 @@ type Order struct {
 	Notes       string        `json:"notes"`
 	VehicleType string        `gorm:"not null" json:"vehicle_type"`
 	VehiclePlate string       `gorm:"not null" json:"vehicle_plate"`
+	// ServiceID terisi setelah order dikonversi jadi Service (lihat ConvertToService).
+	// Dipakai buat cegah konversi dobel & biar frontend tahu harus redirect kemana.
+	ServiceID   *uuid.UUID    `gorm:"type:uuid" json:"service_id,omitempty"`
 	CreatedAt   time.Time     `json:"created_at"`
 	UpdatedAt   time.Time     `json:"updated_at"`
 }
