@@ -14,9 +14,22 @@ type Workshop struct {
 	Description string    `json:"description"`
 	Address     string    `gorm:"not null" json:"address"`
 	Phone       string    `json:"phone"`
-	IsActive    bool      `gorm:"default:true" json:"is_active"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	// QrisImageURL nyimpen kode QRIS statis milik bengkel (base64 data URI atau
+	// link gambar) — ditampilkan ke customer pas mau bayar tunai/QRIS langsung
+	// di tempat, TANPA lewat Midtrans. Operator upload sekali dari halaman
+	// pengaturan workshop, dipakai berkali-kali.
+	QrisImageURL string `gorm:"type:text" json:"qris_image_url"`
+	// Latitude & Longitude opsional — operator isi lewat Google Maps (share
+	// lokasi/pin di peta) pas bikin/edit workshop. Kalau kosong (nil), workshop
+	// ini gak akan ikut dihitung jaraknya pas customer cari "bengkel terdekat".
+	Latitude  *float64 `json:"latitude,omitempty"`
+	Longitude *float64 `json:"longitude,omitempty"`
+	// DistanceKM BUKAN kolom database (gorm:"-") — cuma keisi on-the-fly pas
+	// request list workshop nyertain lokasi customer (?lat=..&lng=..).
+	DistanceKM *float64  `gorm:"-" json:"distance_km,omitempty"`
+	IsActive   bool      `gorm:"default:true" json:"is_active"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 type Slot struct {
@@ -32,18 +45,23 @@ type Slot struct {
 
 // DTOs
 type CreateWorkshopRequest struct {
-	Name        string `json:"name" validate:"required,min=3"`
-	Description string `json:"description"`
-	Address     string `json:"address" validate:"required"`
-	Phone       string `json:"phone" validate:"omitempty"`
+	Name        string   `json:"name" validate:"required,min=3"`
+	Description string   `json:"description"`
+	Address     string   `json:"address" validate:"required"`
+	Phone       string   `json:"phone" validate:"omitempty"`
+	Latitude    *float64 `json:"latitude" validate:"omitempty,min=-90,max=90"`
+	Longitude   *float64 `json:"longitude" validate:"omitempty,min=-180,max=180"`
 }
 
 type UpdateWorkshopRequest struct {
-	Name        string `json:"name" validate:"omitempty,min=3"`
-	Description string `json:"description"`
-	Address     string `json:"address" validate:"omitempty"`
-	Phone       string `json:"phone" validate:"omitempty"`
-	IsActive    *bool  `json:"is_active" validate:"omitempty"`
+	Name         string   `json:"name" validate:"omitempty,min=3"`
+	Description  string   `json:"description"`
+	Address      string   `json:"address" validate:"omitempty"`
+	Phone        string   `json:"phone" validate:"omitempty"`
+	QrisImageURL string   `json:"qris_image_url" validate:"omitempty"`
+	Latitude     *float64 `json:"latitude" validate:"omitempty,min=-90,max=90"`
+	Longitude    *float64 `json:"longitude" validate:"omitempty,min=-180,max=180"`
+	IsActive     *bool    `json:"is_active" validate:"omitempty"`
 }
 
 type CreateSlotRequest struct {
@@ -59,10 +77,10 @@ type UpdateSlotRequest struct {
 // BulkCreateSlotRequest dipakai operator buat generate banyak slot sekaligus
 // berdasarkan rentang tanggal + hari tertentu, biar gak perlu klik Create satu-satu.
 type BulkCreateSlotRequest struct {
-	StartDate  string `json:"start_date" validate:"required"`             // format: 2006-01-02
-	EndDate    string `json:"end_date" validate:"required"`               // format: 2006-01-02
+	StartDate  string `json:"start_date" validate:"required"`                          // format: 2006-01-02
+	EndDate    string `json:"end_date" validate:"required"`                            // format: 2006-01-02
 	DaysOfWeek []int  `json:"days_of_week" validate:"required,min=1,dive,min=0,max=6"` // 0=Minggu ... 6=Sabtu
-	Time       string `json:"time" validate:"required"`                  // format: 15:04
+	Time       string `json:"time" validate:"required"`                                // format: 15:04
 	MaxBooking int    `json:"max_booking" validate:"omitempty,min=1"`
 }
 

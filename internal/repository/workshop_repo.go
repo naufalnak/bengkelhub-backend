@@ -9,6 +9,7 @@ import (
 type WorkshopRepository interface {
 	Create(workshop *domain.Workshop) error
 	FindAll(page, limit int) ([]domain.Workshop, int64, error)
+	FindAllActive() ([]domain.Workshop, error)
 	FindByID(id uuid.UUID) (*domain.Workshop, error)
 	FindByOwnerID(ownerID uuid.UUID, page, limit int) ([]domain.Workshop, int64, error)
 	Update(workshop *domain.Workshop) error
@@ -45,6 +46,19 @@ func (r *workshopRepository) FindAll(page, limit int) ([]domain.Workshop, int64,
 		Find(&workshops).Error
 
 	return workshops, total, err
+}
+
+// FindAllActive ambil SEMUA workshop aktif tanpa pagination — dipakai khusus
+// pas ada query lokasi customer (?lat=&lng=), karena kita perlu hitung &
+// urutkan jarak SEMUA workshop dulu sebelum bisa di-paginate dari yang terdekat.
+func (r *workshopRepository) FindAllActive() ([]domain.Workshop, error) {
+	var workshops []domain.Workshop
+	err := r.db.
+		Where("is_active = ?", true).
+		Preload("Owner").
+		Order("created_at DESC").
+		Find(&workshops).Error
+	return workshops, err
 }
 
 func (r *workshopRepository) FindByID(id uuid.UUID) (*domain.Workshop, error) {

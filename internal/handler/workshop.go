@@ -20,11 +20,21 @@ func NewWorkshopHandler(workshopService service.WorkshopService) *WorkshopHandle
 }
 
 // GET /api/v1/workshops — public, list semua workshop aktif
+// Query opsional ?lat=&lng= — kalau diisi (browser share GPS customer), hasil
+// diurutkan dari yang PALING DEKAT & tiap workshop dapat field distance_km.
 func (h *WorkshopHandler) GetAll(c *fiber.Ctx) error {
 	page, _ := strconv.Atoi(c.Query("page", "1"))
 	limit, _ := strconv.Atoi(c.Query("limit", "10"))
 
-	workshops, total, err := h.workshopService.GetAll(page, limit)
+	var lat, lng *float64
+	if v, err := strconv.ParseFloat(c.Query("lat"), 64); err == nil {
+		lat = &v
+	}
+	if v, err := strconv.ParseFloat(c.Query("lng"), 64); err == nil {
+		lng = &v
+	}
+
+	workshops, total, err := h.workshopService.GetAll(page, limit, lat, lng)
 	if err != nil {
 		return response.Error(c, fiber.StatusInternalServerError, "Failed to fetch workshops", nil)
 	}

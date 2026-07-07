@@ -137,6 +137,8 @@ func main() {
 		Description: "Bengkel umum motor dan mobil terpercaya di Bekasi",
 		Address:     "Jl. Raya Bekasi No. 10, Bekasi Utara",
 		Phone:       "+622112345678",
+		Latitude:    ptr(-6.1927),
+		Longitude:   ptr(107.0022),
 		IsActive:    true,
 	}
 	ws2 := &domain.Workshop{
@@ -145,6 +147,8 @@ func main() {
 		Description: "Spesialis servis AC, tune up, dan perawatan berkala",
 		Address:     "Jl. Industri Raya No. 45, Cikarang Selatan",
 		Phone:       "+622187654321",
+		Latitude:    ptr(-6.2857),
+		Longitude:   ptr(107.1533),
 		IsActive:    true,
 	}
 
@@ -446,7 +450,7 @@ func main() {
 	log.Println("  Password: password123")
 	log.Println("")
 	log.Println("=== DATA YANG DIBUAT ===")
-	log.Println("  - 2 workshop")
+	log.Println("  - 2 workshop (sudah ada koordinat lat/lng buat tes \"bengkel terdekat\")")
 	log.Println("  - 6 slot booking")
 	log.Println("  - 5 pelanggan walk-in + 1 dari konversi order5")
 	log.Println("  - 7 kendaraan")
