@@ -22,7 +22,7 @@ func NewCustomerHandler(customerService service.CustomerService) *CustomerHandle
 
 func handleOwnershipError(c *fiber.Ctx, err error) error {
 	switch err.Error() {
-	case "workshop not found", "customer not found", "vehicle not found", "service not found", "invoice not found", "payment not found", "service item not found":
+	case "workshop not found", "customer not found", "vehicle not found", "service not found", "invoice not found", "payment not found", "service item not found", "service offering not found":
 		return response.Error(c, fiber.StatusNotFound, err.Error(), nil)
 	case "forbidden: you don't own this workshop":
 		return response.Error(c, fiber.StatusForbidden, err.Error(), nil)

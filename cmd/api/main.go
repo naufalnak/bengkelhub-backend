@@ -33,43 +33,47 @@ func main() {
 		&domain.ServiceItem{},
 		&domain.Invoice{},
 		&domain.Payment{},
+		&domain.ServiceOffering{},
 	); err != nil {
 		log.Fatalf("AutoMigrate failed: %v", err)
 	}
 
 	// ── Repositories ──────────────────────────────────────
-	userRepo     := repository.NewUserRepository(config.DB)
+	userRepo := repository.NewUserRepository(config.DB)
 	workshopRepo := repository.NewWorkshopRepository(config.DB)
-	slotRepo     := repository.NewSlotRepository(config.DB)
-	orderRepo    := repository.NewOrderRepository(config.DB)
+	slotRepo := repository.NewSlotRepository(config.DB)
+	orderRepo := repository.NewOrderRepository(config.DB)
 	customerRepo := repository.NewCustomerRepository(config.DB)
-	vehicleRepo  := repository.NewVehicleRepository(config.DB)
-	serviceRepo  := repository.NewServiceRepository(config.DB)
-	invoiceRepo  := repository.NewInvoiceRepository(config.DB)
-	paymentRepo  := repository.NewPaymentRepository(config.DB)
+	offeringRepo := repository.NewServiceOfferingRepository(config.DB)
+	vehicleRepo := repository.NewVehicleRepository(config.DB)
+	serviceRepo := repository.NewServiceRepository(config.DB)
+	invoiceRepo := repository.NewInvoiceRepository(config.DB)
+	paymentRepo := repository.NewPaymentRepository(config.DB)
 
 	// ── Services ──────────────────────────────────────────
-	authSvc        := service.NewAuthService(userRepo)
-	workshopSvc    := service.NewWorkshopService(workshopRepo)
-	slotSvc        := service.NewSlotService(slotRepo, workshopRepo)
-	orderSvc       := service.NewOrderService(orderRepo, slotRepo, workshopRepo, userRepo, customerRepo, vehicleRepo, serviceRepo)
-	customerSvc    := service.NewCustomerService(customerRepo, workshopRepo)
-	vehicleSvc     := service.NewVehicleService(vehicleRepo, customerRepo, workshopRepo)
+	authSvc := service.NewAuthService(userRepo)
+	workshopSvc := service.NewWorkshopService(workshopRepo)
+	slotSvc := service.NewSlotService(slotRepo, workshopRepo)
+	orderSvc := service.NewOrderService(orderRepo, slotRepo, workshopRepo, userRepo, customerRepo, vehicleRepo, serviceRepo)
+	customerSvc := service.NewCustomerService(customerRepo, workshopRepo)
+	offeringSvc := service.NewServiceOfferingService(offeringRepo, workshopRepo)
+	vehicleSvc := service.NewVehicleService(vehicleRepo, customerRepo, workshopRepo)
 	serviceMgmtSvc := service.NewServiceManagementService(serviceRepo, vehicleRepo, workshopRepo)
-	invoiceSvc     := service.NewInvoiceService(invoiceRepo, paymentRepo, serviceRepo, workshopRepo)
-	laporanSvc     := service.NewLaporanService(paymentRepo, workshopRepo)
+	invoiceSvc := service.NewInvoiceService(invoiceRepo, paymentRepo, serviceRepo, workshopRepo)
+	laporanSvc := service.NewLaporanService(paymentRepo, workshopRepo)
 
 	// ── Handlers ──────────────────────────────────────────
-	authHandler     := handler.NewAuthHandler(authSvc)
+	authHandler := handler.NewAuthHandler(authSvc)
 	workshopHandler := handler.NewWorkshopHandler(workshopSvc)
-	slotHandler     := handler.NewSlotHandler(slotSvc, workshopRepo)
-	orderHandler    := handler.NewOrderHandler(orderSvc)
+	slotHandler := handler.NewSlotHandler(slotSvc, workshopRepo)
+	orderHandler := handler.NewOrderHandler(orderSvc)
 	customerHandler := handler.NewCustomerHandler(customerSvc)
-	vehicleHandler  := handler.NewVehicleHandler(vehicleSvc)
-	serviceHandler  := handler.NewServiceHandler(serviceMgmtSvc)
-	invoiceHandler  := handler.NewInvoiceHandler(invoiceSvc)
-	laporanHandler  := handler.NewLaporanHandler(laporanSvc)
-	webhookHandler  := handler.NewWebhookHandler(invoiceSvc)
+	offeringHandler := handler.NewServiceOfferingHandler(offeringSvc)
+	vehicleHandler := handler.NewVehicleHandler(vehicleSvc)
+	serviceHandler := handler.NewServiceHandler(serviceMgmtSvc)
+	invoiceHandler := handler.NewInvoiceHandler(invoiceSvc)
+	laporanHandler := handler.NewLaporanHandler(laporanSvc)
+	webhookHandler := handler.NewWebhookHandler(invoiceSvc)
 
 	// ── Fiber ─────────────────────────────────────────────
 	app := fiber.New(fiber.Config{
@@ -167,6 +171,14 @@ func main() {
 
 	// Laporan
 	workshops.Get("/:workshopId/laporan", opAuth, opRole, laporanHandler.GetMonthly)
+
+	// Layanan yang ditawarkan bengkel — GET publik (dipakai customer di halaman
+	// detail bengkel & operator di halaman kelola), mutasi khusus operator
+	workshops.Get("/:workshopId/services-offered", offeringHandler.GetAll)
+	workshops.Post("/:workshopId/services-offered", opAuth, opRole, offeringHandler.Create)
+	offerings := v1.Group("/service-offerings", opAuth, opRole)
+	offerings.Patch("/:id", offeringHandler.Update)
+	offerings.Delete("/:id", offeringHandler.Delete)
 
 	// Slots standalone
 	slots := v1.Group("/slots")

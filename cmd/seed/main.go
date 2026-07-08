@@ -65,6 +65,7 @@ func main() {
 		&domain.ServiceItem{},
 		&domain.Invoice{},
 		&domain.Payment{},
+		&domain.ServiceOffering{},
 	); err != nil {
 		log.Fatalf("AutoMigrate failed: %v", err)
 	}
@@ -179,6 +180,30 @@ func main() {
 		Booked:     0,
 	}
 	must(db.Where("workshop_id = ? AND date = ?", slot2.WorkshopID, slot2.Date).FirstOrCreate(slot2).Error, "create slot2")
+
+	// ── 4b. Layanan yang ditawarkan (menu, bukan pekerjaan servis aktual) ─────
+	log.Println("→ Creating service offerings...")
+
+	offeringsWs1 := []domain.ServiceOffering{
+		{WorkshopID: ws1.ID, Name: "Ganti Oli", Description: "Oli mesin + cek level pelumas lainnya", EstimatedPrice: ptr(75000.0)},
+		{WorkshopID: ws1.ID, Name: "Servis Rem", Description: "Cek & ganti kampas rem depan/belakang", EstimatedPrice: ptr(120000.0)},
+		{WorkshopID: ws1.ID, Name: "Tune Up Mesin", Description: "Setel ulang mesin biar performa optimal", EstimatedPrice: ptr(150000.0)},
+		{WorkshopID: ws1.ID, Name: "Servis AC Motor/Mobil", Description: "Cek freon, kompresor, dan kebersihan filter", EstimatedPrice: ptr(200000.0)},
+		{WorkshopID: ws1.ID, Name: "Ganti Ban", Description: "Pasang ban baru + balancing", EstimatedPrice: nil},
+	}
+	offeringsWs2 := []domain.ServiceOffering{
+		{WorkshopID: ws2.ID, Name: "Servis AC Mobil", Description: "Spesialisasi kami — cek freon, evaporator, kompresor", EstimatedPrice: ptr(250000.0)},
+		{WorkshopID: ws2.ID, Name: "Tune Up & Filter Udara", Description: "Setel mesin + ganti filter udara", EstimatedPrice: ptr(180000.0)},
+		{WorkshopID: ws2.ID, Name: "Spooring & Balancing", Description: "Perbaikan geometri roda", EstimatedPrice: ptr(150000.0)},
+	}
+	for i := range offeringsWs1 {
+		must(db.Where("workshop_id = ? AND name = ?", offeringsWs1[i].WorkshopID, offeringsWs1[i].Name).
+			FirstOrCreate(&offeringsWs1[i]).Error, "create offeringsWs1[i]")
+	}
+	for i := range offeringsWs2 {
+		must(db.Where("workshop_id = ? AND name = ?", offeringsWs2[i].WorkshopID, offeringsWs2[i].Name).
+			FirstOrCreate(&offeringsWs2[i]).Error, "create offeringsWs2[i]")
+	}
 
 	// ── 5. Walk-in Customers (data internal bengkel, bukan akun login) ────────
 	log.Println("→ Creating walk-in customers...")
@@ -485,6 +510,7 @@ func wipeAll(db *gorm.DB) {
 		&domain.Invoice{},
 		&domain.ServiceItem{},
 		&domain.Service{},
+		&domain.ServiceOffering{},
 		&domain.Order{},
 		&domain.Slot{},
 		&domain.Vehicle{},
